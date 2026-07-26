@@ -39,9 +39,16 @@ and compared through those.
 | Agreement — exact match / embeddings / **taxonomy** | 0 · 75 · **127** |
 | Confirmed coverage gap | **4 of 20** mappable reference classes |
 
+A wider denominator including scoped MITRE ATLAS techniques gives 47 of 76, but that figure is
+reported as a sensitivity result rather than a finding: the technique subset behind it was
+selected by keyword and has never been reviewed, so `analyze` declines to call it a confirmed
+gap until it is.
+
 - [`vulnerability-scanner/README.md`](vulnerability-scanner/README.md) — setup and commands
-- [`docs/FINDINGS.md`](vulnerability-scanner/docs/FINDINGS.md) — 24 findings, indexed by status
+- [`docs/FINDINGS.md`](vulnerability-scanner/docs/FINDINGS.md) — 25 findings, indexed by status
 - [`docs/HANDOFF.md`](vulnerability-scanner/docs/HANDOFF.md) — current state and what remains
+- [`docs/ATLAS_SUBSET_REVIEW.md`](vulnerability-scanner/docs/ATLAS_SUBSET_REVIEW.md) — the open
+  reviewer decision on that denominator
 
 The reference scanners are installed from pinned commits by `scanners/setup.sh` and are
 gitignored — third-party code is not vendored into this history.
