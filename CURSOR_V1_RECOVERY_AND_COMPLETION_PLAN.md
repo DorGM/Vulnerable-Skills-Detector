@@ -1,269 +1,1343 @@
-# Vulnerable-Skills-Detector V1 — Recovery and Completion Plan for Cursor
+# Vulnerable-Skills-Detector V1 — Strict Two-Part Completion Plan
 
-## Audit verdict
-
-The repository contains useful implementation work, but the latest V1 run is **not a valid labeling checkpoint**. It is a second invalid attempt caused by broken LLM integration and missing hard gates. Do not continue from the current `CHECKPOINT_LABELING_REQUIRED_V1` state.
-
-### Valid or reusable work
-
-Preserve and revalidate these items rather than rebuilding them unnecessarily:
-
-- Protected baseline data and the original V0 archive. Current protected-hash verification passes, and the V0 manifest SHA-256 is still `190bbe5de478378aacd9db37f696b8c09fe93837f54f88a81aba0bba661f62cd`.
-- The first invalid zero-Skill attempt archive and its audit document.
-- Repository-root and UTF-8 utilities, subject to rerunning their tests.
-- The Skill-manifest loader, subject to a fresh hard assertion that exactly 735 valid Skill directories load.
-- Pinned scanner checkouts and virtual environments, after revalidating exact commits, executables, versions, `scan --help`, and dependency environments.
-- Installed Ollama and downloaded `qwen3:8b` and `llama3.1:8b`, if they still exist locally and their full Ollama digests validate.
-- Committed SS0 and CS1 baselines, but only after integrity and count validation.
-- Existing deterministic evaluator, normalization, matching, sampling, packet, metrics, and statistics modules as starting points—not as completed stages.
-
-### Invalid or incomplete work that must be redone
-
-- The task ledger is stale and does not reflect the actual run.
-- Model qualification used five synthetic prompts per trial, not the existing 50-example development set. The current model selection and lock are invalid.
-- The stored model digest is truncated and the lock omits prompt/context hashes.
-- `configs/scanner_profiles.yaml` still contains the invalid Cisco argument `--enable-llm`, while Python code defines a different profile source.
-- The scanner runner bypasses the canonical Ollama adapter:
-  - SkillSpector receives the wrong provider mapping.
-  - Cisco receives `llama3.1:8b` instead of `ollama/llama3.1:8b`.
-  - Cisco Meta is not consistently given the correct localhost base URL and dummy key.
-- SkillSpector SS1 failed all 60 attempted runs.
-- Cisco CS2 returned process success but its LLM analyzer failed because LiteLLM could not identify the provider.
-- Cisco CS3 returned process success but Meta failed/fell open on all attempted runs.
-- Failed per-Skill results were stored as completed, and smoke/pilot stages passed despite 100% failure.
-- The orchestrator continued after hard-gate failures.
-- Raw stdout/stderr are truncated, so important scanner exceptions were lost.
-- Empty native outputs were normalized and matched as if every baseline finding were suppressed.
-- O2 is a placeholder; O3/O4/H1/H2/H3 were not actually generated.
-- Experiment B, LLM stability, statistics, and final reports remain placeholders or incomplete.
-- The sampled V1 manifest contains 32 duplicate finding IDs and is based on invalid native deltas.
-- Freeze recorded an issues list but still passed.
-- The current labeling checkpoint is invalid and its required checkpoint document is absent.
-- The test suite currently passes, but it does not test the failed semantics above.
+> **This file supersedes and replaces the previous `CURSOR_V1_RECOVERY_AND_COMPLETION_PLAN.md`.**
+>
+> It is the **only recovery/completion execution plan Cursor may follow** for V1.  
+> Do not add work, refactors, experiments, models, metrics, or stages that are not explicitly authorized here.
+>
+> The original 38-task research specification remains the scientific acceptance reference behind this plan, but Cursor must execute **only the numbered steps below**, in this order.
 
 ---
 
-# Ready-to-paste Cursor instruction
+# 0. Objective and audited starting point
 
-You are continuing the V1 experiment in `Vulnerable-Skills-Detector-1`.
+The project must be completed in two strictly separated parts:
 
-Your goal is to repair the current implementation and execute the experiment to the first legitimate stopping point:
+- **PART 1 — PRE-LABEL:** repair/validate the experiment, run the required scanners/evaluators, and freeze exactly 400 blind evidence-complete review units.
+- **MANUAL LABELING STOP:** the user will label the 400 units externally with ChatGPT and return the completed ground-truth file.
+- **PART 2 — POST-LABEL:** validate the supplied gold labels, run the final experiments/statistics/reports, verify integrity, and finish the research run.
 
-- `CHECKPOINT_LOCAL_LLM_SETUP_REQUIRED` only when local Ollama genuinely cannot be made operational; or
-- `CHECKPOINT_LABELING_REQUIRED_V1` only after a valid, blind, evidence-complete, duplicate-free 400-unit V1 test set exists.
+Current audited state that must be respected:
 
-Do not generate gold labels. Do not use any paid, hosted, or cloud LLM. All experiment LLM traffic must go only to local Ollama on `127.0.0.1:11434`.
+- Protected V0/baseline assets are reusable and must remain immutable.
+- The 735-Skill corpus is expected to remain intact.
+- The previous false labeling checkpoint is invalid.
+- The current `llama3.1:8b` model lock is **not scientifically valid** and must not be trusted.
+- The previous model qualification used insufficient finding context and selected a model with catastrophic TP loss.
+- Package 4 / one-Skill probing was interrupted.
+- Several execution-control defects still exist or require revalidation: stage completion on failures, nested raw-result normalization, cloud fallback text/path, exact matching behavior, fake-delta sampling fallback, and freeze-with-warnings behavior.
+- Reuse valid artifacts only when their hashes, provenance, configuration, code dependencies, and semantic gates still match the corrected pipeline.
 
-The original 38-task plan remains the source of truth for scientific requirements and acceptance criteria. This continuation plan tells you how to recover efficiently from the current invalid state without restarting valid work.
+The goal is to finish **as quickly as possible without invalidating the research**.
 
-## Global execution rules
+---
 
-1. Work through the packages below strictly in order. Finish and validate one package before starting the next.
-2. Update `vulnerability-scanner/docs/experiments/v1/TASK_EXECUTION_LEDGER.md` immediately before and after every package, while retaining mapping to original Tasks 1–38.
-3. Never mark a stage or Skill complete because a subprocess merely returned exit code 0. Validate semantic success.
-4. When a hard gate fails, fix it and rerun that package. Do not continue downstream.
-5. Reuse only artifacts whose hashes, provenance, and semantic validity pass current code.
-6. Do not overwrite protected baselines or the V0 archive.
-7. Use UTF-8 explicitly for all text/JSON I/O and PowerShell-compatible commands.
-8. Avoid broad refactors. Repair existing modules and add focused tests.
-9. In this extracted repository, Git may show extensive CRLF-only churn. Do not stage or commit unrelated line-ending changes. Confirm each substantive diff.
-10. Add a Windows keep-awake guard around the long experiment command, using `SetThreadExecutionState` through Python `ctypes`, and restore the previous state on exit. It must require no administrator privileges and do nothing on non-Windows systems.
+# 1. Non-negotiable execution contract
 
-## Package 1 — Recover and quarantine the second invalid attempt
+## 1.1 Sequential execution
 
-1. Verify protected hashes before moving anything.
-2. Preserve the existing first invalid archive.
-3. Archive the current invalid second attempt under new, clearly named paths such as:
-   - `data/evaluation/archive/invalid_v1_llm_adapter_and_gate_attempt_20260805/`
-   - `results/experiments/archive/invalid_v1_llm_adapter_and_gate_attempt_20260805/`
-4. Archive at least the current V1 manifest, sample report, SHA file, review packets, label template, current state, invalid scanner runs, empty native normalized outputs, matching, evaluator outputs, policies, metrics, and false checkpoint artifacts.
-5. Write `docs/experiments/v1/INVALID_V1_LLM_ATTEMPT_AUDIT.md` documenting:
-   - SS1: 60 failed attempts;
-   - CS2: LiteLLM provider failure caused by missing `ollama/` prefix;
-   - CS3: Meta fail-open/UNKNOWN failure;
-   - failed results marked completed;
-   - empty outputs normalized and matched;
-   - false suppression deltas;
-   - 32 duplicate finding IDs;
-   - freeze and checkpoint incorrectly passed.
-6. Create a fresh V1 state file. Do not reuse per-Skill completion records from the invalid attempt.
-7. Keep valid protected baselines, scanner installations, model files, and independently valid preflight evidence outside the invalid archive.
+1. Execute steps strictly in order.
+2. Do not start the next step until the current step has **PASSED** its hard gate.
+3. Never mark a step complete because a command merely returned exit code 0.
+4. Completion requires the stated **semantic** acceptance gate.
+5. Do not silently relax any count, hash, identity, provenance, error-rate, model, evidence, blindness, or reproducibility condition.
 
-**Gate:** protected hashes still pass; invalid V1 products no longer occupy active V1 paths; fresh state has no completed scanner/evaluation/sampling stages.
+## 1.2 Mandatory approval stop on any unexpected error or mismatch
 
-## Package 2 — Repair the execution foundation
+Known defects explicitly listed inside a step are **authorized repair work** and do not themselves require approval.
 
-Fix these modules before any new LLM run:
+However, if any of the following occurs:
 
-- `src/vuln_scanner/experiment/state.py`
-- `src/vuln_scanner/experiment/orchestrator_v1.py`
-- `src/vuln_scanner/experiment/scanner_exec.py`
-- `src/vuln_scanner/experiment/ollama_adapter.py`
-- `configs/scanner_profiles.yaml`
+- an unexpected error;
+- an unexpected mismatch;
+- a hard-gate failure after the authorized work;
+- a required count differs from expected;
+- a hash/provenance check fails;
+- a scanner/profile behaves differently from the defined profile;
+- a model/digest differs from the active lock;
+- a parser/schema failure violates the step gate;
+- an output is missing, empty, contaminated, duplicated, ambiguous in an unsafe way, or semantically invalid;
+- a required dependency/configuration is unavailable;
+- the required fix would go outside this plan;
 
-Required changes:
+then Cursor must:
 
-1. Support exactly: `pending`, `running`, `completed`, `partial`, `failed`, `blocked`, `invalidated`.
-2. Define a real stage DAG. Every stage record must include upstream stage IDs, direct input hashes, relevant source/config/prompt hashes, scanner executable/commit/version, and local model identity/digest where applicable.
-3. Include changes under experiment, filters, scanners, configs, authored taxonomy, prompts, and policies in invalidation hashes.
-4. Store per-Skill state as success, failed, timeout, parser_failed, blocked, or abstained. Only semantic success is resumable as completed.
-5. Verify the result file hash when deciding whether to skip a completed Skill.
-6. A scanner stage can complete only when `requested > 0`, every requested Skill has an explicit terminal state, and `completed + failed == requested`.
-7. Smoke/pilot error rate above 5% must raise a hard failure, not a warning.
-8. A failed stage must stop the run loop. Downstream stages must not execute.
-9. A blocked, absent, empty, parser-failed, or fail-open profile must not be normalized or matched.
-10. Preserve complete stdout and stderr—not truncated strings—along with exit code, parsed JSON, parser status, duration, retry, analyzers, model name, and full digest.
-11. Make one profile source authoritative. Prefer loading `configs/scanner_profiles.yaml` and validating it against each pinned scanner’s actual `scan --help`. Remove duplicate hard-coded definitions or generate them from the YAML.
-12. Replace all actual scanner CLI uses of `--enable-llm` with Cisco’s `--use-llm`. Add a repository-wide test that parses scanner argument definitions and fails on `--enable-llm` as a scanner argument.
-13. Delete the duplicate environment mapping in `scanner_exec.py`. Use one canonical adapter for all profiles:
-    - SkillSpector: provider `openai`, model selected model, base `http://127.0.0.1:11434/v1`, dummy key `ollama-local`.
-    - Cisco LLM: model `ollama/<selected-model>`, base `http://127.0.0.1:11434`, dummy key.
-    - Cisco Meta: same `ollama/` model/base/dummy key.
-    - O2: OpenAI-compatible localhost `/v1` endpoint and dummy key.
-14. Hard-fail any non-localhost experiment LLM URL and any automatic cloud fallback.
-15. Make required quality commands fail the stage on nonzero exit.
-16. Implement `--resume`, `--force-stage`, and `--invalidate-downstream` against the real DAG.
+1. **STOP immediately.**
+2. Update the active Part trace MD and `TASK_EXECUTION_LEDGER.md` as `BLOCKED` or `FAILED`.
+3. Do not start the next step.
+4. Do not invent an unplanned workaround.
+5. Do not broaden scope.
+6. Print exactly this concise block to the user:
 
-**Focused tests before continuing:** state semantics; failed subprocess; semantic Cisco LLM failure; Meta UNKNOWN/fail-open; blocked normalization; output-hash resume; downstream invalidation; profile-source synchronization; localhost-only enforcement.
+```text
+ERROR_BLOCKED
 
-## Package 3 — Revalidate preflight, hardware, and local models
+Part:
+Step:
+Expected:
+Observed:
+Error or mismatch:
+Evidence/log paths:
+Minimal proposed fix:
+Artifacts/stages that would be invalidated:
+Trace updated at:
 
-1. Rerun root discovery, UTF-8 tests, and the real manifest loader. Hard-assert exactly 735 valid Skill directories.
-2. Revalidate pinned scanner commits, executables, versions, `scan --help`, and dependency environments without reinstalling valid environments.
-3. Correct hardware detection. A failed `nvidia-smi` command is not a GPU name. Store `null` plus a detection note when no supported GPU is found.
-4. Confirm Ollama CLI and API, `OLLAMA_NO_CLOUD=1`, and loopback-only binding. Record evidence, not only configuration claims.
-5. Inventory both candidate models using full Ollama digests, size, quantization, parameters when reported, and pull status.
-6. Repair health checks so each candidate is tested through both:
-   - native Ollama API; and
-   - OpenAI-compatible `/v1/chat/completions`.
-7. Validate the exact classification schema, not merely JSON parseability.
-8. Replace the current five-prompt synthetic qualification. Use the existing 50-example development set, both candidates, the same prompt/context builder, and three complete trials per candidate.
-9. Compute every required development metric and select one model by the original priority order.
-10. Create a new lock with full model digest, quantization, Ollama version, temperature, context policy, all prompt hashes, and adapter version. Invalidate all LLM/downstream work when any locked field changes.
-
-**Gate:** one legitimately selected and fully locked local model. If neither 8B model passes and 14B is infeasible, stop only at `CHECKPOINT_LOCAL_LLM_SETUP_REQUIRED` with exact evidence and resume instructions.
-
-## Package 4 — One-Skill integration probes
-
-Before smoke tests, run one fixed Skill at a time and preserve full raw evidence:
-
-1. SS0: confirm static SkillSpector success.
-2. CS0 and CS1: confirm Cisco static/behavioral success.
-3. SS1: capture the complete current exception, repair its environment/dependencies, and verify that the selected Ollama model was actually called.
-4. CS2: verify no `LLM_ANALYSIS_FAILED`, no LiteLLM provider error, and that `ollama/<model>` was used.
-5. CS3: verify Meta is explicitly executed; expected fields exist; there is no UNKNOWN fail-open, failure summary, or hidden fallback.
-6. O2: verify localhost-only request, exact model digest, strict TP/FP/uncertain output, raw response, prompt hash, cache key, and abstention on malformed output.
-
-**Gate:** all seven probes pass semantic validation. Do not start smoke tests before this gate.
-
-## Package 5 — Smoke and pilot gates
-
-1. Run 10 fixed Skills for all required scanner profiles and O2.
-2. Verify exact attempted counts, per-Skill raw files, attribution, JSON/schema parsing, no profile contamination, consistent digest, Meta success, and zero repeated valid work on resume.
-3. Run 50 fixed Skills for all required scanner profiles and O2.
-4. Enforce the below-5% error threshold, excluding only documented infrastructure outages.
-5. Record local runtime, locally reported token usage as computational usage, CPU/GPU utilization when available, and failures.
-6. Validate committed SS0 and CS1 counts and run CS0 freshly. Never derive CS0 from CS1.
-
-**Gate:** smoke and pilot pass for every profile. A single blocked/failed profile blocks the full run.
-
-## Package 6 — Full six-profile execution
-
-1. Reuse SS0 and CS1 only after integrity validation.
-2. Run/complete all 735 Skills for SS1, CS0, CS2, and CS3 using the locked model.
-3. Store one complete raw result per Skill per profile.
-4. On timeout, save it, retry once at double timeout, then store final failure and continue.
-5. A failure is never equivalent to zero findings.
-6. Verify `--resume` performs zero duplicate valid scans and only retries eligible failures according to explicit policy.
-
-**Gate:** each profile reports requested, completed, failed, timeout, parser-failed, blocked, and finding counts with all 735 Skills accounted for.
-
-## Package 7 — Normalize, match, and evaluate
-
-1. Normalize only real valid outputs, profile by profile, with zero cross-scanner contamination.
-2. Populate all required finding identity, provenance, taxonomy, scanner, and model fields.
-3. Preserve unique instance identity; prevent silent overwrites and unexplained collisions.
-4. Implement guaranteed maximum-weight bipartite matching. Do not silently fall back to greedy matching; make the required solver a pinned project dependency or implement an equivalent exact algorithm.
-5. Enforce native matching preconditions and produce all five required comparisons.
-6. Run O1 components independently and preserve each vote.
-7. Implement and run real O2 on controlled baseline candidate pools using only the locked local model; no placeholders and no gold-label access.
-8. Generate actual per-finding O3, O4, H1, H2, and H3 predictions with complete policy metadata.
-
-**Gate:** no empty placeholder directories; every expected candidate has an explicit prediction, failure, or abstention record; blocked profiles cannot create suppression claims.
-
-## Package 8 — Finish post-labeling analysis code before sampling
-
-Using synthetic fixtures only, fully implement and test:
-
-1. Manifest join: `review_id -> finding_id`; gold labels keyed by review ID; predictions keyed by finding ID.
-2. Experiment A and B variants required by the original plan.
-3. All required metrics, including separate handling of gold `uncertain` and correct naming of pooled relative recall.
-4. Skill- and repository-clustered bootstrap, paired bootstrap, McNemar, Cochran’s Q, correction, effect sizes, 95% intervals, and 2-point TP-retention non-inferiority.
-5. LLM stability analysis.
-6. Real Markdown, JSON, JSONL, and CSV report generators. No heading-only placeholder reports.
-7. Future resume validation for exactly 400 labels without rerunning valid scanner/Ollama work.
-
-**Gate:** synthetic fixture tests create complete nonempty outputs and verify the identity join.
-
-## Package 9 — Sample, build packets, and freeze
-
-1. Build exactly 200 SkillSpector and 200 Cisco units, each with 160 baseline and 40 valid native-delta/disagreement units.
-2. Select delta first and require valid native provenance.
-3. Exclude development IDs, delta/baseline overlap, already selected IDs, and duplicate evidence instances.
-4. Apply adaptive tiers and seed `20260805`; record the tier per scanner and stratum.
-5. Generate blind packets with all required context, traces, related files, metadata, and cross-file/package evidence.
-6. Replace any evidence-incomplete candidate.
-7. Freeze must raise and fail on any issue. An issues list may never coexist with completed status.
-8. Hard assertions: exactly 400; 200 per scanner; 160/40 per scanner; zero duplicate instance IDs; zero stratum overlap; zero dev overlap; zero evidence-empty units; valid paths; valid native provenance; all packets blind.
-
-**Gate:** all freeze assertions pass and the SHA file matches the exact frozen manifest.
-
-## Package 10 — Final quality, resume, and checkpoint
-
-1. Run from `vulnerability-scanner/`:
-   - `python -m pytest tests/ -q`
-   - `ruff check src tests`
-   - `mypy src`
-2. Run the main command twice with `--resume`; the second run must perform zero duplicate valid scanner or Ollama work and preserve hashes.
-3. Change one controlled upstream fixture, verify exact downstream invalidation, and restore it.
-4. Verify protected hashes again.
-5. Create the complete checkpoint document and execution report required by original Tasks 36 and 38.
-6. Print only the required `CHECKPOINT_LABELING_REQUIRED_V1` block and stop. Do not generate labels.
-
-## Expected resume command
-
-Run from `vulnerability-scanner/` in PowerShell after the selected model has been validly locked:
-
-```powershell
-$env:OLLAMA_NO_CLOUD="1"
-$env:VSD_LLM_PROVIDER="ollama"
-$env:VSD_LLM_MODEL="<selected-model-from-lock>"
-$env:VSD_LLM_BASE_URL="http://127.0.0.1:11434"
-$env:VSD_LLM_TEMPERATURE="0"
-$env:VSD_LLM_MAX_CONCURRENCY="1"
-$env:VSD_LLM_API_KEY="ollama-local"
-python -m vuln_scanner experiment run --config configs/native_vs_external_v1.yaml --resume
+WAITING_FOR_USER_APPROVAL
 ```
 
-Do not manually force the current false labeling checkpoint. Repair and invalidate from the earliest affected stage, then let the corrected DAG determine downstream reruns.
+7. Wait for explicit user approval before corrective work or continuation.
 
-## Final response requirements
+### Allowed non-blocking cases
 
-At the legitimate checkpoint, return:
+These do **not** require approval when explicitly permitted by the current step:
 
-- status of original Tasks 1–38;
-- exact paths of both invalid-attempt archives;
-- protected hash verification;
-- 735-Skill validation;
-- test/lint/type-check results;
-- scanner commits, versions, and executables;
-- Ollama local-only evidence;
-- selected model and full digest;
-- smoke, pilot, and full-run status/counts per profile;
-- Meta success/failure counts;
-- normalization, matching, O1/O2/policy coverage;
-- sample composition and tiers;
-- confirmation of zero duplicates and zero evidence-empty units;
-- frozen V1 SHA-256 and review paths;
-- exact resume command after labels;
-- every remaining blocker.
+- an intentionally negative test that fails in the expected way;
+- the single explicitly allowed timeout retry;
+- documented per-Skill failures that remain inside an explicitly stated accepted error-rate gate;
+- reuse/skipping of already-valid work when hash/provenance/state validation passes.
+
+All such cases must still be recorded in the trace.
+
+## 1.3 Local LLM only
+
+All experimental LLM inference must use local Ollama only:
+
+```text
+127.0.0.1:11434
+```
+
+Never use or fall back to:
+
+- OpenAI hosted inference;
+- Anthropic;
+- Gemini;
+- OpenRouter;
+- NVIDIA hosted inference;
+- remote Ollama/cloud models;
+- any other paid or hosted inference API.
+
+`ollama-local` may be used only as the local dummy compatibility API-key value.
+
+A non-local experiment LLM base URL is a hard failure.
+
+## 1.4 Protected research assets
+
+Never modify protected V0/baseline research data.
+
+Verify hashes at the beginning of Part 1, at the Part 1 freeze, and at final Part 2 completion.
+
+## 1.5 Scope control
+
+- Modify only files required by the numbered steps below.
+- Avoid broad refactors.
+- Do not mass-format files.
+- Do not normalize repository line endings.
+- Ignore unrelated CRLF/LF-only Git noise.
+- Do not run vendored scanner test suites.
+- Do not reinstall scanners/Ollama/models when the existing installation passes validation.
+- Do not create placeholder outputs that can satisfy a stage.
+- Do not generate gold labels.
+
+---
+
+# 2. Mandatory live trace files
+
+Cursor must maintain **two separate concise execution traces**.
+
+## Part 1 trace
+
+Create at the beginning of Part 1:
+
+```text
+vulnerability-scanner/docs/experiments/v1/PART1_PRE_LABEL_EXECUTION_TRACE.md
+```
+
+## Part 2 trace
+
+Create only when the user supplies the completed gold-label file:
+
+```text
+vulnerability-scanner/docs/experiments/v1/PART2_POST_LABEL_EXECUTION_TRACE.md
+```
+
+## Trace rules
+
+The trace is a live audit document, not a final retrospective.
+
+For every step:
+
+1. Before work: set the step to `RUNNING`.
+2. Immediately after success: set it to `PASSED`.
+3. On a stop: set it to `BLOCKED` or `FAILED` before messaging the user.
+4. Never backfill the whole trace only at the end.
+5. Keep it full but short. Do not paste large logs.
+6. Point to raw logs/artifacts by path.
+7. Never delete previous results or failure history; append corrections/amendments.
+
+Use this compact structure for each step:
+
+```markdown
+## <Step ID> — <name>
+
+- Status: PENDING | RUNNING | PASSED | BLOCKED | FAILED | REUSED
+- Start:
+- End:
+- Duration:
+- Reused work:
+- Work performed:
+- Hard gate expected:
+- Hard gate observed:
+- Tests/checks:
+- Key output paths/hashes:
+- Errors/mismatches:
+- User approval required: yes/no
+- Next allowed step:
+```
+
+Also continue updating:
+
+```text
+vulnerability-scanner/docs/experiments/v1/TASK_EXECUTION_LEDGER.md
+```
+
+The two trace files are the concise human-readable progress record; the ledger remains the detailed task/state record.
+
+---
+
+# 3. Speed-first execution rules
+
+The run should be as short as scientifically safe.
+
+1. **Reuse before rerun.** Reuse an artifact only when current code/config/model/upstream hashes and semantic validity prove it is still valid.
+2. Use focused tests during repair. Run the full project test/lint/type-check suite only at the explicit final gates.
+3. Preserve per-Skill resume/caching. Never repeat a valid scanner or O2 result unnecessarily.
+4. Do not reinstall existing valid scanner environments, Ollama, or models.
+5. Do not repeat model downloads.
+6. Keep Ollama experimental concurrency at the locked safe value; do not trade reproducibility/stability for aggressive parallelism.
+7. Use the existing Windows keep-awake guard for long runs.
+8. For O2, use the smallest controlled candidate pool necessary for the frozen 400-unit set; do not evaluate every baseline finding by default.
+9. Do not generate final gold-based analyses in Part 1.
+10. If a long stage is interrupted, resume from valid per-Skill/per-finding state instead of restarting the stage.
+
+---
+
+# PART 1 — BEFORE THE 400-SAMPLE LABELING
+
+The only successful Part 1 endpoint is:
+
+```text
+CHECKPOINT_LABELING_REQUIRED_V1
+```
+
+After this checkpoint Cursor must stop and wait for the user's completed gold labels.
+
+---
+
+## P1-01 — Establish the valid starting state
+
+### Do
+
+1. Record current Git commit.
+2. Create/update `PART1_PRE_LABEL_EXECUTION_TRACE.md`.
+3. Verify protected baseline hashes.
+4. Verify the protected V0 manifest hash.
+5. Verify exactly **735 valid Skill directories**.
+6. Verify existing invalid-attempt archives remain preserved.
+7. Verify the false previous active V1 checkpoint/state cannot be reused.
+8. Invalidate/archive the scientifically invalid current model lock and every downstream artifact that depends on it.
+9. Invalidate the interrupted one-Skill/Package-4 continuation state where required.
+10. Preserve valid scanner installations, Ollama installation, downloaded models, V0, SS0, CS1, and independent valid preflight evidence.
+
+### Hard gate
+
+- Protected hashes pass.
+- Exactly 735 Skills load.
+- Invalid model-lock/downstream V1 work cannot be resumed accidentally.
+- Valid protected/reusable assets remain untouched.
+
+### Mandatory error stop
+
+Any unexpected hash/count/state/provenance mismatch → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P1-02 — Repair and prove execution-control correctness
+
+This step authorizes repair of the already-audited pipeline-control defects only.
+
+### Do
+
+Repair/revalidate:
+
+1. Stage status semantics:
+   - `pending`
+   - `running`
+   - `completed`
+   - `partial`
+   - `failed`
+   - `blocked`
+   - `invalidated`
+
+2. Scanner stage completion:
+   - `requested > 0`;
+   - every requested Skill has an explicit terminal state;
+   - success/failure accounting is complete;
+   - a stage cannot be completed merely because its orchestration command returned 0.
+
+3. Failed/blocked/parser-failed/fail-open profiles must never produce downstream-valid empty normalized outputs.
+
+4. Raw-result parsing/normalization must correctly read the current nested result structure, including `run.parsed_data`.
+
+5. Preserve complete:
+   - stdout;
+   - stderr;
+   - exit code;
+   - parser result;
+   - duration;
+   - retry state;
+   - analyzers;
+   - model identity/digest.
+
+6. Remove/disable every V1 cloud fallback/configuration path. The only local-LLM setup checkpoint is:
+
+```text
+CHECKPOINT_LOCAL_LLM_SETUP_REQUIRED
+```
+
+7. Ensure profile arguments are authoritative and exact:
+   - no Cisco scanner CLI use of `--enable-llm`;
+   - use `--use-llm`.
+
+8. Ensure Cisco LLM and Meta use `ollama/<selected-model>` and localhost.
+
+9. Required quality commands must fail their stage on nonzero exit.
+
+10. Matching must use exact maximum-weight bipartite matching; no silent greedy fallback.
+
+11. Ambiguous matches remain ambiguous, never silently converted to suppressed.
+
+12. Sampling may never fill a missing `native_delta` quota with ordinary baseline findings.
+
+13. Freeze may never pass when an issues list is nonempty.
+
+14. Resume must validate result hashes and semantic success before skipping work.
+
+15. Downstream invalidation must follow the dependency DAG.
+
+### Focused validation only
+
+Run focused tests for the corrected invariants. Do not run the full suite yet.
+
+### Hard gate
+
+All listed execution-control invariants are proven by focused tests.
+
+### Mandatory error stop
+
+Any listed invariant that still fails after authorized repair, or any new unplanned pipeline defect → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P1-03 — Validate the exact local execution environment
+
+### Do
+
+Validate without unnecessary reinstall:
+
+1. Exactly 735 Skills.
+2. Pinned SkillSpector:
+   - executable path;
+   - exact commit;
+   - version;
+   - `scan --help`;
+   - dependency environment.
+
+3. Pinned Cisco skill-scanner:
+   - executable path;
+   - exact commit;
+   - version;
+   - `scan --help`;
+   - dependency environment.
+
+4. Exact SS0/SS1/CS0/CS1/CS2/CS3 profile flags against real scanner help.
+
+5. Ollama:
+   - CLI;
+   - localhost API;
+   - `OLLAMA_NO_CLOUD=1`;
+   - loopback-only service;
+   - no cloud fallback.
+
+6. Candidate models already present:
+   - `qwen3:8b`;
+   - `llama3.1:8b`;
+   - full digest;
+   - size;
+   - quantization;
+   - parameter count when reported.
+
+7. Canonical environment adapter:
+   - SkillSpector → localhost OpenAI-compatible Ollama;
+   - Cisco LLM → `ollama/<model>`;
+   - Cisco Meta → `ollama/<model>`;
+   - O2 → localhost `/v1`.
+
+8. Direct native Ollama and OpenAI-compatible health checks for both candidates using the real classification schema.
+
+### Hard gate
+
+Every required executable/profile/local endpoint is valid and no experimental LLM path can leave localhost.
+
+### Mandatory error stop
+
+Any environment/profile/commit/digest/localhost mismatch → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P1-04 — Requalify and lock the local model correctly
+
+The current `llama3.1:8b` lock is invalid and must not be reused.
+
+### Do
+
+Use only the existing **50-example development set**.
+
+Evaluate:
+
+- `qwen3:8b`
+- `llama3.1:8b`
+
+Run **3 complete trials per candidate** using identical prompt/context-building code.
+
+The qualification context must contain enough evidence to make a real finding judgment, including at minimum:
+
+- finding description;
+- raw flagged evidence;
+- relevant source snippet/context;
+- file/path/line information;
+- rule/context metadata;
+- relevant source/sink information when available.
+
+Do not qualify from scanner/rule/path/line metadata alone.
+
+Measure:
+
+- JSON/schema success;
+- TP retention;
+- FP suppression;
+- precision;
+- abstention;
+- verdict consistency;
+- API failure rate;
+- median local runtime.
+
+### Model-selection hard gate
+
+Selection priority:
+
+1. no catastrophic TP loss;
+2. highest TP retention;
+3. reliable structured output;
+4. stable repeated verdicts;
+5. precision;
+6. runtime.
+
+Do not lock an 8B model merely because the other candidate failed parsing.
+
+If neither 8B model qualifies:
+
+1. assess `qwen3:14b` feasibility using the recorded local hardware;
+2. run it only if it can operate reliably;
+3. otherwise stop at `CHECKPOINT_LOCAL_LLM_SETUP_REQUIRED`.
+
+### Lock
+
+Freeze:
+
+- model;
+- full Ollama digest;
+- quantization;
+- Ollama version;
+- temperature;
+- context policy;
+- prompt hashes;
+- environment-adapter version.
+
+Any later change to these fields invalidates all downstream LLM work.
+
+### Hard gate
+
+Exactly one scientifically qualified local model is fully locked.
+
+### Mandatory error stop
+
+If no model meets the gate, a metric is inconsistent, context is insufficient, or a model/digest cannot be proven → update trace + ledger, emit `ERROR_BLOCKED` or the permitted local-model checkpoint, and wait for user approval.
+
+---
+
+## P1-05 — One-Skill semantic integration probes
+
+Use one fixed Skill and prove each path before expensive execution.
+
+### Do
+
+Probe:
+
+1. SS0
+2. SS1
+3. CS0
+4. CS1
+5. CS2
+6. CS3
+7. O2
+
+Verify for every relevant path:
+
+- exact profile;
+- real Skill attempted;
+- valid parser/schema;
+- raw output preserved;
+- selected model digest actually used where applicable;
+- Cisco LLM truly executed;
+- Cisco Meta truly executed;
+- no UNKNOWN/fail-open accepted as success;
+- O2 returns TP/FP/uncertain or explicit abstention;
+- no cloud credential/endpoint;
+- resume skips valid result.
+
+Reuse already-valid non-LLM probes only if their dependency hashes still match after P1-02.
+
+### Hard gate
+
+All seven paths pass semantic validation.
+
+### Mandatory error stop
+
+Any probe failure/mismatch outside explicitly permitted retry behavior → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval. Do not launch smoke tests.
+
+---
+
+## P1-06 — 10-Skill smoke and 50-Skill pilot gates
+
+### Do
+
+Use fixed reproducible Skill lists.
+
+Run/reuse valid results for:
+
+- SS0
+- SS1
+- CS0
+- CS1
+- CS2
+- CS3
+- O2 where defined by the experiment flow
+
+First 10 Skills, then 50 Skills.
+
+Verify:
+
+- exact attempted counts;
+- real per-Skill results;
+- valid attribution;
+- valid parsing/schema;
+- no profile contamination;
+- model digest consistency;
+- explicit Meta success;
+- no unexplained identity collision;
+- local-only inference;
+- resume performs zero duplicate valid work.
+
+Accepted scanner-profile error rate:
+
+```text
+< 5%
+```
+
+excluding only documented infrastructure outages.
+
+A documented failure inside the allowed threshold must be recorded but is not itself a plan mismatch.
+
+### Hard gate
+
+Both smoke and pilot gates pass for every required profile.
+
+### Mandatory error stop
+
+Any profile exceeds the gate, Meta fails/falls open, resume repeats valid work, or any unexpected mismatch appears → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P1-07 — Complete the six full scanner profiles
+
+### Speed rule
+
+Reuse committed/full results only after integrity + dependency validation.
+
+### Do
+
+For all 735 Skills:
+
+- SS0 — reuse only if valid;
+- SS1 — run/complete with locked model;
+- CS0 — run freshly unless a valid current post-repair full run already exists;
+- CS1 — reuse only if valid;
+- CS2 — run/complete with locked model;
+- CS3 — run/complete with locked model + verified Meta.
+
+Store one raw result per Skill per profile.
+
+On timeout:
+
+1. save timeout;
+2. retry once at double timeout;
+3. save final failure;
+4. continue.
+
+A failure is never equivalent to zero findings.
+
+Use per-Skill resume so an interruption does not restart valid work.
+
+### Hard gate
+
+For every profile:
+
+- requested = 735;
+- all 735 Skills have explicit terminal state;
+- completed/failed/timeouts/parser failures are fully accounted;
+- no missing Skills;
+- no invalid empty profile is treated as valid.
+
+### Mandatory error stop
+
+Any profile-level accounting/provenance/model mismatch or hard-gate failure → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval before downstream normalization.
+
+---
+
+## P1-08 — Normalize identities and execute native matching
+
+### Do
+
+Normalize only semantically valid profile outputs.
+
+For each finding preserve:
+
+- unique finding instance identity;
+- candidate key;
+- duplicate group/occurrence/count;
+- scanner/profile/analyzer/rule;
+- category/severity;
+- path/line range;
+- raw evidence/metadata;
+- reviewed taxonomy classes;
+- scanner version/commit;
+- model digest when applicable.
+
+Verify:
+
+- zero silent overwrite;
+- zero unexplained ID collisions;
+- zero scanner/profile contamination.
+
+Run exact native comparisons:
+
+- SS0 → SS1
+- CS0 → CS1
+- CS1 → CS2
+- CS1 → CS3
+- CS2 → CS3
+
+Produce explicit:
+
+- matched;
+- suppressed;
+- new;
+- merged;
+- split;
+- ambiguous;
+- unmatched;
+- score;
+- level.
+
+Never match against blocked/absent/empty/parser-failed/fail-open profiles.
+
+### Hard gate
+
+All normalized profiles and five matching comparisons are provenance-valid, collision-safe, and exact.
+
+### Mandatory error stop
+
+Any identity collision, contamination, invalid source profile, unsafe ambiguity handling, or matching mismatch → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P1-09 — Run O1, O2, and policy predictions with minimum necessary LLM work
+
+### O1
+
+Run separately:
+
+- markdown context;
+- dataflow;
+- semantic context.
+
+Preserve independent component votes.
+
+### O2 — speed-optimized controlled pool
+
+Use only the locked local model.
+
+Do **not** run O2 over every baseline finding by default.
+
+Run O2 on:
+
+1. all valid native-delta/disagreement candidates needed to build the 40-delta strata;
+2. a seeded, stratified baseline candidate reserve sufficient to fill 160 baseline units per scanner plus replacements.
+
+Initial baseline reserve:
+
+```text
+192 SkillSpector baseline candidates
+192 Cisco baseline candidates
+```
+
+If the final sample cannot be completed because of evidence/limits/duplicates, expand the affected scanner reserve in deterministic batches of **32** only as needed.
+
+O2 must preserve:
+
+- finding ID;
+- TP/FP/uncertain;
+- raw response;
+- prompt hash;
+- adequate evidence/context;
+- model digest;
+- cache key;
+- parse/inference failure;
+- abstention.
+
+Never read gold labels.
+
+### Policies
+
+Generate real per-finding outputs for the evaluated candidate universe:
+
+- O3
+- O4
+- H1
+- H2
+- H3
+
+No empty placeholder directories.
+
+### Hard gate
+
+Every required candidate has an explicit valid prediction, failure, or abstention record, and all LLM inference is local/cached.
+
+### Mandatory error stop
+
+Any cloud path, missing prediction universe, invalid O2 context, model mismatch, placeholder output, or policy inconsistency → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P1-10 — Complete post-label analysis code using synthetic fixtures only
+
+Do not run real gold-label analysis yet.
+
+### Do
+
+Implement/test with synthetic fixtures:
+
+1. Join:
+   - manifest `review_id → finding_id`;
+   - gold keyed by `review_id`;
+   - predictions keyed by `finding_id`.
+
+2. Experiment A required native variants.
+
+3. Experiment B:
+   - Native;
+   - O1 components;
+   - O2;
+   - O3;
+   - O4;
+   - H1;
+   - H2;
+   - H3.
+
+4. Metrics:
+   - precision;
+   - FP suppression rate;
+   - TP retention;
+   - false suppression rate;
+   - coverage;
+   - abstention;
+   - F1;
+   - MCC;
+   - balanced accuracy;
+   - Skill-level metrics;
+   - pooled relative recall;
+   - runtime;
+   - local computational token usage;
+   - error rate.
+
+5. Statistics:
+   - Skill-clustered bootstrap;
+   - repository-clustered sensitivity bootstrap;
+   - paired bootstrap;
+   - McNemar;
+   - Cochran's Q;
+   - multiple-comparison correction;
+   - effect sizes;
+   - 95% CI;
+   - 2-percentage-point TP-retention non-inferiority.
+
+6. LLM stability analysis.
+
+7. Real nonempty Markdown/JSON/JSONL/CSV report generators.
+
+8. Future resume must accept exactly 400 labels without rerunning valid scanner/Ollama work.
+
+### Speed rule
+
+Use small synthetic fixtures only. Do not perform large bootstrap/report runs on real data before labels exist.
+
+### Hard gate
+
+Synthetic fixture tests prove the complete Part 2 analysis path can execute end-to-end.
+
+### Mandatory error stop
+
+Any missing metric/statistic/join/report output required above → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P1-11 — Select exactly 400 review units
+
+### Required composition
+
+Exactly:
+
+```text
+SkillSpector: 160 baseline + 40 real delta = 200
+Cisco:        160 baseline + 40 real delta = 200
+TOTAL:                                    400
+```
+
+### Do
+
+1. Select delta first.
+2. Delta priority:
+   - native-only;
+   - baseline suppressed by valid native filtering;
+   - materially changed by native analysis;
+   - native/external disagreement;
+   - hybrid disagreement;
+   - difficult/uncertain evidence.
+
+3. Every delta must have real valid native/external provenance.
+4. Never replace missing delta with ordinary baseline.
+5. Exclude:
+   - development-set IDs;
+   - delta/baseline overlap;
+   - already selected IDs;
+   - duplicate evidence instances.
+
+6. Apply adaptive limits using the lowest tier that fills the stratum.
+7. Seed:
+
+```text
+20260805
+```
+
+8. Record the tier used per scanner and stratum.
+
+### Hard gate
+
+Exactly 400 unique, provenance-valid units with exact 160/40 composition per scanner.
+
+### Mandatory error stop
+
+If any required stratum cannot be filled, any duplicate/overlap exists, or any delta lacks valid provenance → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval. Do not weaken the quota automatically.
+
+---
+
+## P1-12 — Build blind, evidence-complete review packets
+
+### Visible packet must include
+
+- neutral risk family;
+- neutral behavior description;
+- Skill purpose;
+- file/path/line range;
+- flagged evidence;
+- surrounding source context;
+- complete relevant function/class;
+- source-to-sink trace where applicable;
+- relevant raw metadata;
+- related files;
+- cross-file source/sink excerpts where applicable;
+- package-level inventory/threshold evidence where applicable.
+
+### Visible packet must hide
+
+- scanner name;
+- rule ID;
+- profile;
+- native verdict;
+- external verdict;
+- sampling source;
+- selected model;
+- LLM confidence.
+
+If evidence is insufficient, replace the candidate from the deterministic reserve.
+
+Do not emit `[file not found]` or similarly incomplete evidence as an acceptable review unit.
+
+### Hard gate
+
+- 400 evidence-complete units;
+- 0 blind-field leaks;
+- 0 evidence-empty/insufficient units;
+- all referenced evidence paths valid.
+
+### Mandatory error stop
+
+Any evidence/blindness/path failure that cannot be satisfied by the authorized deterministic replacement pool → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P1-13 — Hard-freeze V1
+
+Generate:
+
+```text
+data/evaluation/v1/test_set_400_v1_manifest.jsonl
+data/evaluation/v1/test_set_400_v1_sampling_report.json
+data/evaluation/v1/test_set_400_v1_sha256.txt
+data/evaluation/v1/review_packets/
+data/evaluation/v1/label_template_v1.jsonl
+```
+
+### Freeze assertions
+
+All must pass:
+
+- exactly 400 total;
+- exactly 200 per scanner;
+- exactly 160 baseline + 40 delta per scanner;
+- 0 duplicate finding IDs;
+- 0 baseline/delta overlap;
+- 0 development-set overlap;
+- 0 evidence-empty units;
+- all evidence paths valid;
+- all delta records have valid provenance;
+- all packets are blind;
+- manifest SHA matches the exact frozen manifest.
+
+An issues list may **never** coexist with successful freeze completion.
+
+### Hard gate
+
+Every assertion passes with an empty issues list.
+
+### Mandatory error stop
+
+Any freeze issue → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval. Do not create a labeling checkpoint.
+
+---
+
+## P1-14 — Final pre-label quality, resume, integrity, and checkpoint
+
+### Do
+
+Run from `vulnerability-scanner/`:
+
+```powershell
+python -m pytest tests/ -q
+ruff check src tests
+mypy src
+```
+
+Then:
+
+1. run the main command with `--resume`;
+2. run it a second time;
+3. verify the second invocation performs:
+   - zero duplicate valid scanner runs;
+   - zero duplicate valid O2 calls;
+   - cached O2 reuse;
+   - unchanged normalization/matching reuse;
+   - unchanged frozen hashes.
+
+4. Perform one controlled upstream invalidation test.
+5. Verify only correct downstream stages invalidate.
+6. Restore the controlled fixture.
+7. Reverify protected V0/baseline hashes.
+8. Finalize `PART1_PRE_LABEL_EXECUTION_TRACE.md`.
+9. Create the labeling checkpoint document/state.
+
+### Hard gate
+
+All tests, resume checks, invalidation checks, protected hashes, and frozen V1 hashes pass.
+
+### Mandatory error stop
+
+Any failing test/lint/type check, duplicate work, bad invalidation, or hash change → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+### Successful Part 1 output
+
+Print only:
+
+```text
+CHECKPOINT_LABELING_REQUIRED_V1
+
+Test set:
+<path>
+
+Review packets:
+<path>
+
+Label template:
+<path>
+
+Test-set SHA-256:
+<hash>
+
+Selected local model:
+<model and full digest>
+
+Part 1 trace:
+<path>
+
+Resume command:
+<command>
+```
+
+Then **STOP COMPLETELY**.
+
+Do not generate labels.
+Do not run real Experiment A/B.
+Do not run final statistics.
+Do not continue into Part 2.
+
+---
+
+# MANUAL LABELING STOP — OUTSIDE CURSOR
+
+The user will provide the 400 blind review units to ChatGPT and manually establish ground truth.
+
+Cursor must do nothing until the user provides the completed file:
+
+```text
+data/evaluation/v1/test_set_400_v1_gold.jsonl
+```
+
+Expected: exactly 400 labeled review IDs.
+
+Only after the user explicitly instructs Cursor to resume with the completed gold file may Part 2 begin.
+
+---
+
+# PART 2 — AFTER THE 400 GROUND-TRUTH LABELS ARE SUPPLIED
+
+At the start of Part 2 create:
+
+```text
+vulnerability-scanner/docs/experiments/v1/PART2_POST_LABEL_EXECUTION_TRACE.md
+```
+
+Do not modify the frozen V1 sample.
+
+---
+
+## P2-01 — Validate the supplied ground-truth file
+
+### Do
+
+Validate:
+
+- exactly 400 records;
+- every `review_id` unique;
+- every `review_id` exists in frozen manifest;
+- no missing review IDs;
+- no extra review IDs;
+- frozen manifest hash unchanged;
+- test-set SHA unchanged;
+- only allowed gold values;
+- `uncertain` preserved explicitly.
+
+Do not inspect labels to tune prompts, policies, model configuration, or sampling.
+
+### Hard gate
+
+The supplied gold file maps exactly and exclusively to the frozen 400 review units.
+
+### Mandatory error stop
+
+Any count/ID/hash/schema mismatch → update Part 2 trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P2-02 — Join gold labels to frozen predictions
+
+### Do
+
+Join only through:
+
+```text
+gold.review_id
+→ frozen manifest.finding_id
+→ prediction.finding_id
+```
+
+Validate one-to-one/defined multiplicity rules and zero missing prediction joins.
+
+Preserve `uncertain` according to the frozen analysis policy.
+
+### Hard gate
+
+Every analyzable gold record joins deterministically to its frozen finding/predictions with no guessed identity.
+
+### Mandatory error stop
+
+Any missing/duplicate/ambiguous identity join → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P2-03 — Run Experiment A
+
+### Do
+
+Run the fully preimplemented native architecture experiment using the frozen gold set.
+
+Generate required:
+
+- per-finding outputs;
+- aggregate metrics;
+- per-scanner metrics;
+- Skill-level metrics;
+- runtime/error data.
+
+Do not rerun scanners or valid Ollama work.
+
+### Hard gate
+
+All required Experiment A variants produce complete nonempty outputs from the frozen data.
+
+### Mandatory error stop
+
+Any missing variant/input/metric or unexpected rerun requirement → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P2-04 — Run Experiment B and LLM stability analysis
+
+### Do
+
+Evaluate:
+
+- Native;
+- O1 components;
+- O2;
+- O3;
+- O4;
+- H1;
+- H2;
+- H3.
+
+Use the same frozen gold set and frozen predictions.
+
+Run LLM stability analysis from the previously recorded repeated/local-model results.
+
+Do not rerun valid expensive LLM work merely to regenerate cached results.
+
+### Hard gate
+
+All required Experiment B and stability outputs are complete and traceable to frozen inputs.
+
+### Mandatory error stop
+
+Any missing prediction family, incompatible frozen artifact, metric inconsistency, or unexpected expensive rerun → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P2-05 — Run final statistical analysis
+
+### Do
+
+Run the preimplemented:
+
+- Skill-clustered bootstrap;
+- repository-clustered sensitivity bootstrap;
+- paired bootstrap;
+- McNemar tests;
+- Cochran's Q;
+- multiple-comparison correction;
+- effect sizes;
+- 95% confidence intervals;
+- 2-percentage-point TP-retention non-inferiority analysis.
+
+Handle `uncertain` exactly according to the frozen analysis policy.
+
+### Hard gate
+
+All required statistical outputs complete without placeholder or silent omission.
+
+### Mandatory error stop
+
+Any invalid statistical input, failed method, missing comparison, or inconsistent sample accounting → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P2-06 — Generate final reports and verify integrity
+
+### Do
+
+Generate final nonempty:
+
+- Markdown;
+- JSON;
+- JSONL;
+- CSV
+
+reports covering:
+
+- scanner/profile counts;
+- Experiment A;
+- Experiment B;
+- O1/O2/policies;
+- hybrid comparisons;
+- LLM stability;
+- statistical results;
+- effect sizes/CIs;
+- runtime;
+- local computational token usage;
+- failures/abstentions;
+- limitations.
+
+Then verify:
+
+- protected V0 unchanged;
+- committed baselines unchanged;
+- frozen V1 unchanged;
+- selected model digest unchanged;
+- no cloud inference used;
+- no valid scanner/Ollama work rerun unnecessarily;
+- every report input traces to the frozen manifest/gold set.
+
+### Hard gate
+
+All final reports exist, are nonempty, internally consistent, and integrity checks pass.
+
+### Mandatory error stop
+
+Any integrity/report/provenance mismatch → update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+---
+
+## P2-07 — Final project completion report
+
+### Do
+
+Finalize:
+
+```text
+vulnerability-scanner/docs/experiments/v1/PART2_POST_LABEL_EXECUTION_TRACE.md
+```
+
+and the detailed task ledger.
+
+Return one concise final execution report containing:
+
+- Part 1 and Part 2 step status;
+- protected-hash confirmation;
+- exact 735-Skill validation;
+- scanner executables/versions/commits;
+- Ollama version/local-only evidence;
+- selected model/full digest;
+- smoke/pilot/full-run status;
+- findings per profile;
+- Cisco Meta results;
+- matching summary;
+- O1/O2/O3/O4/H1/H2/H3 coverage;
+- frozen 400-sample composition;
+- V1 SHA-256;
+- gold-label validation;
+- Experiment A results;
+- Experiment B results;
+- stability results;
+- statistical results;
+- final report paths;
+- confirmation that no paid/cloud LLM was used;
+- every remaining limitation/blocker.
+
+### Hard gate
+
+All Part 1 and Part 2 required steps are `PASSED`, all integrity checks pass, and no unresolved blocker remains.
+
+### Mandatory error stop
+
+If any required final assertion is false → do not declare the project complete. Update trace + ledger, emit `ERROR_BLOCKED`, and wait for user approval.
+
+### Successful endpoint
+
+Only after the hard gate passes, print:
+
+```text
+V1_EXPERIMENT_COMPLETE
+
+Part 1 trace:
+<path>
+
+Part 2 trace:
+<path>
+
+Frozen test-set SHA-256:
+<hash>
+
+Final report directory:
+<path>
+
+Protected baseline verification:
+PASSED
+
+Cloud/paid LLM inference:
+NONE
+```
+
+---
+
+# 4. Absolute prohibitions
+
+Cursor must never:
+
+- generate the 400 gold labels;
+- infer missing gold labels;
+- change the frozen sample after labeling begins;
+- change the locked model/prompt/context policy after freeze;
+- treat `uncertain` as TP/FP without the frozen policy;
+- convert scanner/LLM failure into zero findings or `keep`;
+- treat ambiguous matching as suppression;
+- invent native deltas to fill quota;
+- continue past a failed hard gate;
+- auto-fix an unplanned mismatch without user approval;
+- use a cloud/paid LLM;
+- rerun expensive valid work unnecessarily;
+- create a false checkpoint;
+- declare completion with unresolved issues.
+
+---
+
+# 5. Execution priority
+
+Cursor must optimize for this order:
+
+```text
+CORRECTNESS OF HARD GATES
+→ REUSE OF VALID WORK
+→ MINIMUM NECESSARY LOCAL-LLM CALLS
+→ RESUMABILITY
+→ SPEED
+```
+
+The project should finish quickly, but no speed optimization may weaken the frozen 400-sample validity, ground-truth independence, or final research reproducibility.
